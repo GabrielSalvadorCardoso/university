@@ -1,0 +1,16 @@
+AbstractCollectionResource
+filter
+map
+annotate
+by attributes
+
+map
+
+by attributes(projeção)
+http://172.30.10.86:8000/instituicoes/ibge/bcim/municipios/geocodigo,nome/
+
+filter(select)
+http://172.30.10.86:8000/instituicoes/ibge/bcim/unidades-federativas/filter/sigla/in/rj,es,go/and/geom/
+http://172.30.10.86:8000/instituicoes/ibge/bcim/unidades-federativas/filter/sigla/in/rj,es,go/&/data/between/2017-02-01,2017-06-30/
+http://luc00557347.ibge.gov.br/controle-list/gasto-list/filter/usuario/eq/http://luc00557347.ibge.gov.br/controle-list/usuario-list/1/*and/valor/gt/19
+/eq/eq/http://luc00557347.ibge.gov.br/controle-list/usuario-list/1/*and/valor/gt/19/or/data/eq/2017-01-01

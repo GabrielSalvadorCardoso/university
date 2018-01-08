@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Map background-color="darkgreen">
+    <Style name="point">
+        <Rule>
+            <MarkersSymbolizer file="imgs/marker-icon.png" allow-overlap="yes" />
+        </Rule>
+    </Style>
+    <Style name="line">
+        <Rule>
+            <LineSymbolizer />
+        </Rule>
+    </Style>
+    <Style name="polygon">
+        <Rule>
+            <PolygonSymbolizer fill="white" />
+        </Rule>
+    </Style>
+</Map>
