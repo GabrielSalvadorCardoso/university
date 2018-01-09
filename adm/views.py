@@ -9,6 +9,7 @@ from hyper_resource.views import *
 from adm.models import *
 from adm.serializers import *
 from adm.contexts import *
+from django.core.cache import cache
 
 def get_root_response(request):
     format = None
@@ -56,6 +57,29 @@ class AlunoDetail(NonSpatialResource):
     def initialize_context(self):
         self.context_resource = AlunoDetailContext()
         self.context_resource.resource = self
+
+    def get(self, request, *args, **kwargs):
+        absolute_uri = request.build_absolute_uri()
+
+        response = super(AlunoDetail, self).get(request, *args, **kwargs)
+
+        # se a uri absoluta estiver no cache ...
+        if cache.get(absolute_uri) != None:
+            # apenas a versão do recurso é guardado na cache
+            # então absolute_uri + cache.get(absolute_uri)
+            # será algo como http://192.168.0.10/recurso - v1
+            #print(request.META.keys())
+            #print(request.META['HTTP_IF_NONE_MATCH'])
+            print(absolute_uri + str(cache.get(absolute_uri)))
+            if request.META['HTTP_IF_NONE_MATCH'] == absolute_uri + str(cache.get(absolute_uri)):
+                return HttpResponse('{"Response" :absolute_uri + cache.get(absolute_uri)')
+                #return Response(status=status.HTTP_304_NOT_MODIFIED)
+        else:
+            cache.set(absolute_uri, ' - v1', 60)
+            response['Etag'] = absolute_uri + ' - v1'
+            return response
+
+        #return response
 
 class CursoList(CollectionResource):
     queryset = Curso.objects.all()
