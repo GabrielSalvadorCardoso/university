@@ -22,7 +22,8 @@ from rest_framework.negotiation import BaseContentNegotiation
 from django.contrib.gis.db import models
 from abc import ABCMeta, abstractmethod
 
-from encoder import encode
+from django.core.cache import cache
+from datetime import datetime
 
 
 from hyper_resource.models import  FactoryComplexQuery, OperationController, BusinessModel, ConverterType
@@ -1296,9 +1297,21 @@ class AbstractCollectionResource(AbstractResource):
         return response
 
     def post(self, request, *args, **kwargs):
+
+        print("KEY: " + request.build_absolute_uri() + request.META['HTTP_ACCEPT'])
+        key = request.build_absolute_uri() + request.META['HTTP_ACCEPT']
+        cached_data = cache.get(key)
+        print(cached_data[0])
+
         serializer = self.serializer_class(data=request.data, context={'request': request})
         if serializer.is_valid():
-            obj =  serializer.save()
+            obj = serializer.save()
+
+            dt = datetime.now()
+            local_hash = local_hash = self.__class__.__name__ + str(dt.microsecond)
+            cached_data[0] = local_hash
+            cache.set(key, cached_data)
+
             self.object_model = obj
             return self.basic_post(request)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -1337,25 +1350,52 @@ class CollectionResource(AbstractCollectionResource):
             objects = self.get_objects_from_filter_operation(attributes_functions_str)
         return objects
 
+    def basic_response(self, request, objects):
+        serialized_data = self.serializer_class(objects, many=True, context={'request':request}).data
+        resp = Response(data=serialized_data, status=200, content_type='application/json')
+        dt = datetime.now()
+        local_hash = self.__class__.__name__ + str(dt.microsecond)
+        resp['Etag'] = local_hash
+        # iri_with_content_type' será algo como http://192.168.0.10/adm-list/aluno-list/application/json
+        iri_with_content_type = request.build_absolute_uri() + request.META['HTTP_ACCEPT']
+        # a iri com o content-type será a chave que aponta para
+        # a resposta cacheada
+        #cache.set(iri_with_content_type, resp['Etag'] , 3600)
+        cache.set(iri_with_content_type, (local_hash, serialized_data), 3600) #  estamos cacheado apenas os dados devemos lembrar de serializer antes de enviar
+        return resp
+
     def basic_get(self, request, *args, **kwargs):
+        key = request.build_absolute_uri() + request.META['HTTP_ACCEPT']
+
+        cached_response = cache.get(key)
+
+        # se a resposta para esta requisição foi cacheada ...
+        if cached_response is not None:
+            # se a Etag cacheada tem o mesmo valor de If-None-Match da requisição ...
+            if request.META['HTTP_IF_NONE_MATCH'] == cached_response[0]:
+                return Response(status=status.HTTP_304_NOT_MODIFIED)
+
+            # se não coincidir, isto é, se o conteúdo estiver desatualizado ...
+            # requisitamos o conteúdo novamente ao servidor (que, neste caso teve
+            # a Etag atualizada por algum método POST, PUT ou DELETE)
+            #resp = Response(data=cached_response[1], status=status.HTTP_200_OK, content_type="application/json")
+            #resp['Etag'] = cached_response[0]
+            #return resp
+
         self.object_model = self.model_class()()
         self.set_basic_context_resource(request)
         attributes_functions_str = self.kwargs.get("attributes_functions", None)
 
         if self.is_simple_path(attributes_functions_str):  # to get query parameters
             objects = self.model_class().objects.all()
-            serialized_data =  self.serializer_class(objects, many=True, context={'request': request})#.data
-            resp =  Response(data= serialized_data.data,status=200, content_type="application/json")
-            #self.add_key_value_in_header(resp, 'Etag', str(hash(objects)))
-            self.add_key_value_in_header(resp, 'Etag', encode(objects))
-            return resp
+            return self.basic_response(request, objects)
 
         elif self.path_has_only_attributes(attributes_functions_str):
             query_set = self.get_objects_by_only_attributes(attributes_functions_str)
             serialized_data = self.get_objects_serialized_by_only_attributes(attributes_functions_str, query_set)
             resp =  Response(data= serialized_data,status=200, content_type="application/json")
             #self.add_key_value_in_header(resp, 'Etag', str(hash(query_set)))
-            self.add_key_value_in_header(resp, 'Etag', encode(query_set))
+            #self.add_key_value_in_header(resp, 'Etag', encode(query_set))
             return resp
 
         elif self.path_has_operations(attributes_functions_str) and self.path_request_is_ok(attributes_functions_str):
@@ -1363,7 +1403,7 @@ class CollectionResource(AbstractCollectionResource):
             serialized_data = self.serializer_class(objects, many=True).data
             resp =  Response(data= serialized_data,status=200, content_type="application/json")
             # self.add_key_value_in_header(resp, 'Etag', str(hash(objects)))
-            self.add_key_value_in_header(resp, 'Etag', encode(objects))
+            #self.add_key_value_in_header(resp, 'Etag', encode(objects))
             return resp
 
         else:
