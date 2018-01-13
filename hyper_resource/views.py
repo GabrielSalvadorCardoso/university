@@ -25,12 +25,13 @@ from abc import ABCMeta, abstractmethod
 from django.core.cache import cache
 from datetime import datetime
 
+from university.settings import DEFAULT_CACHE_VALID_TIME, init_cache
 
 from hyper_resource.models import  FactoryComplexQuery, OperationController, BusinessModel, ConverterType
 from image_generator.img_generator import BuilderPNG
 
 SECRET_KEY = '-&t&pd%%((qdof5m#=cp-=-3q+_+pjmu(ru_b%e+6u#ft!yb$$'
-
+init_cache()
 
 class IgnoreClientContentNegotiation(BaseContentNegotiation):
     def select_parser(self, request, parsers):
@@ -1292,29 +1293,106 @@ class AbstractCollectionResource(AbstractResource):
         return Response ( data=self.context_resource.context(), content_type='application/ld+json' )
 
     def basic_post(self, request):
+        # modificando cache da COLEÇÃO (se mudarmos um objeto, mudamos uma colação inteira)
+        dt = datetime.now()
+        # Calculando nova etag
+        list_local_hash = self.__class__.__name__ + str(dt.microsecond)
+
+        # Chave para o contaúdo cacheado
+        list_request_key = request.build_absolute_uri() + '[' + request.META['HTTP_ACCEPT'] + ']'
+
+        # Recuperando lista atualizada
+        #updated_data = self.model_class().objects.all()
+        # Serializando a nova lista
+        #updated_data_serialized = self.serializer_class(updated_data, many=True, context={'request':request}).data
+
+        # atualizando o cache para a requisição 'list_request_key'
+        # todas as requisições GET não coincidirão mais com a etag atual
+        cache.set(list_request_key, list_local_hash, DEFAULT_CACHE_VALID_TIME)
+
+        # para requisição POST precisamos atualizar as etags referentes
+        # a lista (neste caso o tipo da requisição é <class_name>Collection)
+        self.update_etags([self.__class__.__name__ + 'Collection'])
+
         response =  Response(status=status.HTTP_201_CREATED, content_type='application/json')
         response['Content-Location'] = request.path + str(self.object_model.pk)
         return response
 
     def post(self, request, *args, **kwargs):
-
-        print("KEY: " + request.build_absolute_uri() + request.META['HTTP_ACCEPT'])
-        key = request.build_absolute_uri() + request.META['HTTP_ACCEPT']
-        cached_data = cache.get(key)
-        print(cached_data[0])
+        # uma requisição POST deve slterar todas as etags relacionadas a lista deste objeto
 
         serializer = self.serializer_class(data=request.data, context={'request': request})
         if serializer.is_valid():
             obj = serializer.save()
-
-            dt = datetime.now()
-            local_hash = local_hash = self.__class__.__name__ + str(dt.microsecond)
-            cached_data[0] = local_hash
-            cache.set(key, cached_data)
-
             self.object_model = obj
             return self.basic_post(request)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def add_cache_keys_dict(self, request_type, cache_key):
+        """
+        Adiciona chaves ao dicionário de chaves da cache,
+        onde 'request_type' é a índice que será associado
+        a chave de cache descrita em 'cache_key'. Esta função
+        é utilizada exclusivamente para requisições GET, pois
+        esta tem a função de guardar requisições no cache, e por
+        consequência inserir uma chave no dicionário
+        :param request_type: e.g. 'AlunoCollection', 'Curso', 'CursoCollection'
+        :param cache_key: a url com accept
+        :return:
+        """
+        CACHE_KEYS_DICT = cache.get('CACHE_KEYS_DICT')
+
+        if request_type in CACHE_KEYS_DICT.keys():
+            # lista de chaves referente ao tipo de requisição (se lista ou objeto)
+            request_type_keys_list = CACHE_KEYS_DICT[request_type]
+
+            if cache_key not in request_type_keys_list:
+                # adiciona a chave da cache a lista referente ao tipo de requisição
+                # apenas se esta já não estiver na lista
+                request_type_keys_list.append(cache_key)
+        else:
+            # se 'request_type' não for um índice do dicionário de chaves
+            # criamos outro índice no dicionário e associamos a chave da cache
+            # ao índice recém criado (que será uma lista de um item só)
+            CACHE_KEYS_DICT[request_type] = [cache_key,]
+
+        # devolve o dicionário de chave para a cache
+        cache.set('CACHE_KEYS_DICT', CACHE_KEYS_DICT, DEFAULT_CACHE_VALID_TIME)
+
+    def update_etags(self, request_types):
+        """
+        Esta função tem o objetivo de atualizar todas as etags
+        relacionandas aos tipos de requisição de 'request_types'.
+        Por exemplo: se fisermos um POST para um objeto do tipo
+        Curso devemos atualizar as etags relacionadas ao tipo de
+        requisição 'CursoCollection'
+        No caso de uma requisição PUT 'request_type'
+        possui dois tipos <class_name> e <class_name>Collection
+        :param request_types:
+        :return:
+        """
+        CACHE_DICT_KEYS = cache.get('CACHE_KEYS_DICT')
+
+        #print(request_types)
+        #print(CACHE_DICT_KEYS)
+
+        for a_type in request_types:
+            keys_list_for_a_type = CACHE_DICT_KEYS[a_type]
+            #new_etag = self.generate_etag()
+            for key in keys_list_for_a_type:
+                # gerando uma etag nova para cada chave
+                # e 'keys_list_for_a_type'
+                cache.set(key, self.generate_etag())
+
+
+    def generate_etag(self):
+        """
+        Gera uma etag baseada no nome da classe
+        de modelo que utiliza esta view (CollectionResource)
+        :return:
+        """
+        dt = datetime.now()
+        return self.__class__.__name__ + str(dt.microsecond)
 
 class CollectionResource(AbstractCollectionResource):
 
@@ -1351,32 +1429,72 @@ class CollectionResource(AbstractCollectionResource):
         return objects
 
     def basic_response(self, request, objects):
+        # serializando os objetos vindos de beasic_get()
         serialized_data = self.serializer_class(objects, many=True, context={'request':request}).data
+        # montando a resposta com os objetos serializados
         resp = Response(data=serialized_data, status=200, content_type='application/json')
-        dt = datetime.now()
-        local_hash = self.__class__.__name__ + str(dt.microsecond)
-        resp['Etag'] = local_hash
-        # iri_with_content_type' será algo como http://192.168.0.10/adm-list/aluno-list/application/json
-        iri_with_content_type = request.build_absolute_uri() + request.META['HTTP_ACCEPT']
-        # a iri com o content-type será a chave que aponta para
-        # a resposta cacheada
-        #cache.set(iri_with_content_type, resp['Etag'] , 3600)
-        cache.set(iri_with_content_type, (local_hash, serialized_data), 3600) #  estamos cacheado apenas os dados devemos lembrar de serializer antes de enviar
+
+        e_tag = self.generate_etag()
+        resp['Etag'] = e_tag
+
+        # montando a chave que será relacionada com a etag na cache
+        # iri_with_content_type' será algo como http://192.168.0.10/adm-list/aluno-list/[application/json]{AlunoCollection}
+        iri_with_content_type =   request.build_absolute_uri() + '[' + request.META['HTTP_ACCEPT'] + ']'
+
+        # PROBLEMA DE LÓGICA: ESTE CÓDIGO DEVERIA ESTAR AQUI? OU APENAS PARA A PRIMEIRA REQUISIÇÃO(CACHE MISS)
+        # armazenando a chave da cache (que liga a etag desta requisição)
+        # no dicionário de chaves de cache
+        self.add_cache_keys_dict(self.__class__.__name__ + 'Collection', iri_with_content_type)
+
+        #cache.set(iri_with_content_type, (local_hash, serialized_data), 3600)
+        # na requisição iremos comparar apenas a etag,
+        # e se for igual a if-none-math, retornaremos 304
+        cache.set(iri_with_content_type, e_tag, DEFAULT_CACHE_VALID_TIME)
+
+        # CACHE_KEYS_DICT tem o objetivo de guardar as chaves que ligam-se a etags (na cache)
+        # isso permite saber quis etags de quais chaves devem ser atualizadas depois de uma
+        # requisição POST, PUT ou DELETE. Por exemplo: em uma requisição PUT para um objeto Aluno
+        # devemos atualizar as etags relacionadas ao conjunto de chaves presentes em 'AlunoCollection'
+        # abaixo. Além disso, devemos atualizar as etags relacionadas as chaves do pŕoprio objeto 'Aluno'
+        #
+        # IMPORTANTE: deve-se criar um índice especial para requisições PUT, visto que esta requisição
+        # modifica tanto a etag do objeto modificado quanto na etag da(s) lista(s) que este esta incluso.
+        # Exemplo de índice: AlunoObjectAndCollection
+        #CACHE_KEYS_DICT = {
+        #    'AlunoCollection': [
+        #        'http://192.168.0.10/adm-list/aluno-list/[application/json]{AlunoCollection}',
+        #        'http://192.168.0.10/adm-list/aluno-list/[text/html]{AlunoCollection}',
+        #        'http://192.168.0.10/adm-list/aluno-list/[application/octet-stream]{AlunoCollection}'
+        #    ],
+        #    'Aluno': [
+        #        'http://192.168.0.10/adm-list/aluno-list/[application/json]{Aluno}',
+        #        'http://192.168.0.10/adm-list/aluno-list/[text/html]{Aluno}',
+        #        'http://192.168.0.10/adm-list/aluno-list/[application/octet-stream]{Aluno}'
+        #    ],
+        #    'CursoCollection': [
+        #        'http://192.168.0.10/adm-list/aluno-list/[application/json]{CursoCollection}',
+        #        'http://192.168.0.10/adm-list/aluno-list/[text/html]{CursoCollection}',
+        #    ]
+        #}
+
         return resp
 
     def basic_get(self, request, *args, **kwargs):
-        key = request.build_absolute_uri() + request.META['HTTP_ACCEPT']
+        #key = request.build_absolute_uri() + request.META['HTTP_ACCEPT']
 
-        cached_response = cache.get(key)
+        key = request.build_absolute_uri() + '[' + request.META['HTTP_ACCEPT'] + ']'
+              #'{' + self.__class__.__name__ + 'Collection}'
+
+        cached_etag = cache.get(key)
 
         # se a resposta para esta requisição foi cacheada ...
-        if cached_response is not None:
+        if cached_etag is not None:
             # se a Etag cacheada tem o mesmo valor de If-None-Match da requisição ...
-            if request.META['HTTP_IF_NONE_MATCH'] == cached_response[0]:
+            if request.META['HTTP_IF_NONE_MATCH'] == cached_etag:#cached_response[0]:
                 return Response(status=status.HTTP_304_NOT_MODIFIED)
 
             # se não coincidir, isto é, se o conteúdo estiver desatualizado ...
-            # requisitamos o conteúdo novamente ao servidor (que, neste caso teve
+            # requisitamos o conteúdo novamente ao cache (que, neste caso teve
             # a Etag atualizada por algum método POST, PUT ou DELETE)
             #resp = Response(data=cached_response[1], status=status.HTTP_200_OK, content_type="application/json")
             #resp['Etag'] = cached_response[0]
@@ -1400,8 +1518,11 @@ class CollectionResource(AbstractCollectionResource):
 
         elif self.path_has_operations(attributes_functions_str) and self.path_request_is_ok(attributes_functions_str):
             objects = self.get_objects_by_functions(attributes_functions_str)
-            serialized_data = self.serializer_class(objects, many=True).data
-            resp =  Response(data= serialized_data,status=200, content_type="application/json")
+
+            resp = self.basic_response(request, objects)
+            #serialized_data = self.serializer_class(objects, many=True).data
+            #resp =  Response(data= serialized_data,status=200, content_type="application/json")
+
             # self.add_key_value_in_header(resp, 'Etag', str(hash(objects)))
             #self.add_key_value_in_header(resp, 'Etag', encode(objects))
             return resp
@@ -1563,5 +1684,3 @@ class FeatureCollectionResource(SpatialCollectionResource):
 
         else:
             return Response(data="This request has invalid attribute or operation", status=400, content_type="application/json")
-
-

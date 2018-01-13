@@ -97,3 +97,24 @@ select * from universidade.aluno;
 select * from universidade.curso;
 select * from universidade.disciplina;
 select * from universidade.curso_disciplina;
+
+create sequence
+universidade.aluno_id_seq
+increment by 1
+minvalue 1
+start 16;
+
+alter table
+universidade.aluno
+alter column id_aluno
+set default nextval('universidade.aluno_id_seq');
+
+
+create sequence universidade.curso_id_seq increment by 1 minvalue 1 start 6;
+alter table universidade.curso alter column id_curso set default nextval('universidade.curso_id_seq');
+
+create sequence universidade.disciplina_id_seq increment by 1 minvalue 1 start 11;
+alter table universidade.disciplina alter column id_disciplina set default nextval('universidade.disciplina_id_seq');
+
+create sequence universidade.curso_disciplina_id_seq increment by 1 minvalue 1 start 27;
+alter table universidade.curso_disciplina alter column id_curso_disciplina set default nextval('universidade.curso_disciplina_id_seq');
