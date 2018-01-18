@@ -33,6 +33,9 @@ from django.contrib.gis.db.models import ForeignKey
 from requests import ConnectionError
 from requests import HTTPError
 
+#from university.settings import DEFAULT_CACHE_VALID_TIME, init_cache
+#init_cache()
+
 import sys
 if sys.version_info > (3,):
     buffer = memoryview
@@ -280,6 +283,11 @@ class QObjectFactory:
         field_type = self.field_type()
         if field_type is None:
             return None
+        if isinstance(a_value, bool):
+            return a_value
+        if (a_value.lower() == 'false' or a_value.lower() == 'true') and self.operation_or_operator == 'isnull':
+            return  False if a_value.lower() == 'false' else True
+
         return converter.value_converted(self.field_type(), a_value)
 
 
@@ -343,8 +351,8 @@ class FactoryComplexQuery:
         return [field.name for field in self.fields(mode_class)]
 
     def base_operators(self):
-        return ['neq', 'eq','lt','lte','gt','gte','between','isnull','like','notlike','in','notin',
-        '*neq', '*eq','*lt','*lte','*gt','*gte','*between','*isnull','*like','*notlike','*in','*notin']
+        return ['neq', 'eq','lt','lte','gt','gte','between','isnull','isnotnull', 'like','notlike','in','notin',
+        '*neq', '*eq','*lt','*lte','*gt','*gte','*between','*isnull','isnotnull','*like','*notlike','*in','*notin']
 
     def logical_operators(self):
         return ['or', 'and', '*or', '*and']
@@ -364,6 +372,14 @@ class FactoryComplexQuery:
 
     def q_object_for_filter_expression(self, q_object_or_none, model_class, expression_as_array):
         #'sigla/in/rj,es,go/and/data/between/2017-02-01,2017-06-30/' = ['sigla','in','rj,es,go','and','data', 'between','2017-02-01,2017-06-30']
+        if '' in expression_as_array:
+            expression_as_array.remove('')
+
+        if len(expression_as_array)  == 2 and expression_as_array[1].lower() in ['isnull', 'isnotnull']:
+            boolean = expression_as_array[1].lower() == 'isnull'
+            expression_as_array[1] = 'isnull'
+            expression_as_array.append(boolean)
+
         if len(expression_as_array)  < 3:
             return q_object_or_none
         oper = expression_as_array[0]
@@ -402,9 +418,7 @@ class FactoryComplexQuery:
         return self.q_object_for_filter_expression(q_object_expression, model_class, expression_as_array[3:])
 
 class OperationController:
-    """
-    Controlador de operações
-    """
+
     _instance = None
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
@@ -633,6 +647,7 @@ class OperationController:
         dicti[MultiPolygon] = self.polygon_operations_dict()
         dicti[MultiLineString] = self.line_operations_dict()
         dicti[GeometryCollection] = self.geometry_operations_dict()
+
         # todos os índices acima acabam apontando para o conteúdo advindo
         # de 'geometry_operations_dict()' direta ou indiretamente
 
@@ -675,10 +690,10 @@ class OperationController:
             # se for, verifica se 'name' representa uma operação/método de 'an_object'
             return an_object.is_operation(name)#return hasattr(an_object, name) and callable(getattr(an_object, name))
         # se não for instância de BusinessModel armazena o tipo do objeto em 'a_type'
-        a_type=type(an_object)
+        a_type = type(an_object)
         # se 'a_type' não for um índice de dicionário de dicionários
         # de operações
-        if a_type not in self.dic_all_operation_dict():
+        if a_type not in self.dict_all_operation_dict():
             # ... retorna False, ou seja, não é uma operação
             return False
         # se 'a_type' é uma das operações (geoespeciais ou não)
@@ -826,7 +841,7 @@ class BusinessModel(models.Model):
         # - resumindo: se 'att_or_method_name' corresponder a algum elemento da lista
         # de métodos do objeto BusinessModel (self) e este método tiver pelo menos 1
         # parâmetro além de 'self' o retorno é True
-         return next((True for name, len_args in self.all_operation_name_and_args_length() if name == att_or_method_name and len_args > 1), False)
+        return next((True for name, len_args in self.all_operation_name_and_args_length() if name == att_or_method_name and len_args > 1), False)
 
     def attribute_names(self):
         # - dir() retorna uma lista de atributos do objeto
