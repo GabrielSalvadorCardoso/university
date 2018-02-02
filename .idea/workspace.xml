@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="1890238b-a972-4416-bcb7-db44212e1be1" name="Default" comment="">
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/generator_files.py" afterPath="$PROJECT_DIR$/generator_files.py" />
     </list>
     <ignored path="university.iws" />
@@ -25,10 +26,10 @@
       <file leaf-file-name="generator_files.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/generator_files.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="30">
-              <caret line="2" column="16" selection-start-line="2" selection-start-column="16" selection-end-line="2" selection-end-column="16" />
+            <state relative-caret-position="45">
+              <caret line="3" column="12" selection-start-line="3" selection-start-column="12" selection-end-line="3" selection-end-column="12" />
               <folding>
-                <element signature="e#55#64#0" expanded="true" />
+                <element signature="e#68#77#0" expanded="true" />
               </folding>
             </state>
           </provider>
@@ -199,7 +200,7 @@
         <state relative-caret-position="0">
           <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
           <folding>
-            <element signature="e#55#64#0" expanded="true" />
+            <element signature="e#68#77#0" expanded="true" />
           </folding>
         </state>
       </provider>
@@ -217,7 +218,7 @@
         <state relative-caret-position="0">
           <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
           <folding>
-            <element signature="e#55#64#0" expanded="true" />
+            <element signature="e#68#77#0" expanded="true" />
           </folding>
         </state>
       </provider>
@@ -240,10 +241,10 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/generator_files.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="30">
-          <caret line="2" column="16" selection-start-line="2" selection-start-column="16" selection-end-line="2" selection-end-column="16" />
+        <state relative-caret-position="45">
+          <caret line="3" column="12" selection-start-line="3" selection-start-column="12" selection-end-line="3" selection-end-column="12" />
           <folding>
-            <element signature="e#55#64#0" expanded="true" />
+            <element signature="e#68#77#0" expanded="true" />
           </folding>
         </state>
       </provider>
